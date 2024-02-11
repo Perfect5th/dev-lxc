@@ -1,0 +1,302 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import subprocess
+import sys
+
+SERIES = ["focal", "jammy", "lunar", "noble"]
+
+
+def create(series: str, config: str = ""):
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    uid = os.getuid()
+
+    if series == SERIES[-1]:
+        remote = "ubuntu-daily"
+    else:
+        remote = "ubuntu"
+
+    # If we can check instance info, we know it already exists.
+    info_call = subprocess.run(
+        ["lxc", "info", instance_name],
+        capture_output=True,
+    )
+
+    if info_call.returncode == 0:
+        print(f"ERROR: Instance {instance_name} already exists")
+        sys.exit(4)
+
+    if config:
+        try:
+            with open(config, "rb") as config_fp:
+                config_input = config_fp.read()
+        except OSError as e:
+            print(f"ERROR: Could not read LXD config from {config}: {e}")
+            sys.exit(4)
+    else:
+        config_input = None
+
+    # Create the instance using the appropriate config.
+    subprocess.run(
+        [
+            "lxc",
+            "launch",
+            f"{remote}:{series}",
+            instance_name,
+            "--config",
+            f"raw.idmap=both {uid} 1000",
+        ],
+        input=config_input,
+        check=True,
+    )
+
+    # Wait for cloud-init to finish.
+    print(
+        f"Waiting for {instance_name} to complete initialization and package installation"
+        " (this might take awhile)"
+    )
+    subprocess.run(
+        ["lxc", "exec", instance_name, "--", "cloud-init", "status", "--wait"],
+    )
+
+    # Mount the filesystem.
+    lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
+    subprocess.run(
+        [
+            "lxc",
+            "config",
+            "device",
+            "add",
+            instance_name,
+            f"{instance_name}-src",
+            "disk",
+            f"source={os.getcwd()}",
+            f"path={lxc_repo_path}",
+        ],
+        check=True,
+    )
+
+    print("All done! ✨ 🍰 ✨")
+    print(
+        f"""
+Jump into your new instance with:
+    dev_lxc shell {series}
+"""
+    )
+
+
+def shell(series: str):
+    proj_dir = os.path.basename(os.getcwd())
+    lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    _start_if_stopped(instance_name)
+
+    subprocess.run(
+        [
+            "lxc",
+            "exec",
+            "--user",
+            "1000",
+            "--group",
+            "1000",
+            "--cwd",
+            lxc_repo_path,
+            "--env",
+            "HOME=/home/ubuntu",
+            "--env",
+            "USER=ubuntu",
+            instance_name,
+            "bash",
+        ],
+    )
+
+
+def remove(series: str):
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    result = subprocess.run(
+        [
+            "lxc",
+            "delete",
+            "--force",
+            instance_name,
+        ],
+    )
+
+    if result.returncode:
+        # Output from the above goes to stdout/err so it should be apparent
+        # what the error was.
+        print(f"Unable to remove instance {instance_name}")
+    else:
+        print(f"Removed instance {instance_name}")
+
+
+def exec_cmd(series: str, command: str, *env_args):
+    proj_dir = os.path.basename(os.getcwd())
+    lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    _start_if_stopped(instance_name)
+
+    run_args = [
+        "lxc",
+        "exec",
+        "--user",
+        "1000",
+        "--group",
+        "1000",
+        "--cwd",
+        lxc_repo_path,
+        "--env",
+        "HOME=/home/ubuntu",
+        "--env",
+        "USER=ubuntu",
+        instance_name,
+    ]
+
+    for env_arg in env_args:
+        run_args.append("--env")
+        run_args.append(env_arg)
+
+    run_args += ["--", "bash", "-c", command]
+
+    result = subprocess.run(run_args)
+
+    if result.returncode:
+        print(f"Error running command {command} on instance {instance_name}")
+    else:
+        print("Command execution completed successfully")
+
+
+def start(series: str) -> None:
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    _start_if_stopped(instance_name)
+
+
+def stop(series: str) -> None:
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    subprocess.run(["lxc", "stop", instance_name])
+
+
+def _get_status(instance_name: str) -> str:
+    """Gets the current status of the dev container for `series`."""
+
+    try:
+        result = subprocess.run(
+            ["lxc", "info", instance_name],
+            capture_output=True,
+            check=True,
+            text=True
+        )
+    except subprocess.CalledProcessError as e:
+        if "Instance not found" in e.stderr:
+            return "NONEXISTENT"
+        raise e
+
+    # Poor-person's YAML decoder.
+    for line in result.stdout.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        k, v = line.split(":", 1)
+        v = v.strip()
+
+        if k == "Status":
+            return v
+
+    return "UNKNOWN"
+
+
+def _start_if_stopped(instance_name: str) -> None:
+    """Starts the LXD instance with name `instance_name` if it is not running.
+    """
+    status = _get_status(instance_name)
+
+    if status == "STOPPED":
+        print(f"Starting {instance_name}")
+        subprocess.run(["lxc", "start", instance_name])
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog="dev_lxc",
+        description="Create, shell into, and remove developer containers",
+    )
+
+    subparsers = parser.add_subparsers(required=True)
+
+    create_parser = subparsers.add_parser(
+        "create",
+        help="creates a container using the given Ubuntu series as a base",
+    )
+    create_parser.set_defaults(func=create)
+
+    shell_parser = subparsers.add_parser(
+        "shell",
+        help="create a bash session in the given series's container",
+    )
+    shell_parser.set_defaults(func=shell)
+
+    remove_parser = subparsers.add_parser(
+        "remove",
+        help="removes a container identified by Ubuntu series",
+    )
+    remove_parser.set_defaults(func=remove)
+
+    exec_parser = subparsers.add_parser(
+        "exec",
+        help="executes an arbitrary command in the given series's container",
+    )
+    exec_parser.set_defaults(func=exec_cmd)
+    exec_parser.add_argument("--env", nargs="*", default=[])
+
+    start_parser = subparsers.add_parser(
+        "start",
+        help="starts the given series's container",
+    )
+    start_parser.set_defaults(func=start)
+
+    stop_parser = subparsers.add_parser(
+        "stop",
+        help="stops the given series's container",
+    )
+    stop_parser.set_defaults(func=stop)
+
+    for subparser in (
+        create_parser,
+        shell_parser,
+        remove_parser,
+        exec_parser,
+        start_parser,
+        stop_parser,
+    ):
+        subparser.add_argument(
+            "series",
+            type=str,
+            help="The Ubuntu series used as the base for the container",
+            choices=SERIES,
+        )
+
+    create_parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        help="An LXD config to configure the instance",
+    )
+    exec_parser.add_argument("command", type=str, help="The command to execute")
+
+    parsed = parser.parse_args(sys.argv[1:])
+
+    if hasattr(parsed, "env"):
+        parsed.func(parsed.series, parsed.command, *parsed.env)
+    else:
+        parsed.func(parsed.series)
