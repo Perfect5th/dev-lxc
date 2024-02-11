@@ -1,6 +1,6 @@
 # dev-lxc
 
-This is a tidy little Python script I use when I want to quickly create an [LXD system container][1] for development purposes.
+This is a tidy little Python script I use when I want to quickly create an [LXD system container][1] for development purposes. It mounts the current directory in the home directory of the instance.
 
 ## Installation
 
