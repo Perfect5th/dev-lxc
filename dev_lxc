@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-SERIES = ["focal", "jammy", "mantic", "noble"]
+SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble"]
 
 
 def create(series: str, config: str = ""):
