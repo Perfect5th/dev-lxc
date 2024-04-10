@@ -86,7 +86,7 @@ Jump into your new instance with:
     )
 
 
-def shell(series: str):
+def shell(series: str, stop_after: bool):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
     instance_name = os.path.basename(proj_dir) + f"-{series}"
@@ -112,6 +112,10 @@ def shell(series: str):
         ],
     )
 
+    if stop_after:
+        print(f"Stopping {instance_name}")
+        stop(series)
+
 
 def remove(series: str):
     proj_dir = os.path.basename(os.getcwd())
@@ -134,7 +138,7 @@ def remove(series: str):
         print(f"Removed instance {instance_name}")
 
 
-def exec_cmd(series: str, command: str, *env_args):
+def exec_cmd(series: str, command: str, stop_after: bool, *env_args):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
     instance_name = os.path.basename(proj_dir) + f"-{series}"
@@ -169,6 +173,10 @@ def exec_cmd(series: str, command: str, *env_args):
         print(f"Error running command {command} on instance {instance_name}")
     else:
         print("Command execution completed successfully")
+
+    if stop_after:
+        print(f"Stopping {instance_name}")
+        stop(series)
 
 
 def start(series: str) -> None:
@@ -245,6 +253,11 @@ if __name__ == "__main__":
         help="create a bash session in the given series's container",
     )
     shell_parser.set_defaults(func=shell)
+    shell_parser.add_argument(
+        "--stop-after",
+        action="store_true",
+        help="stop the container after the exiting the shell"
+    )
 
     remove_parser = subparsers.add_parser(
         "remove",
@@ -258,6 +271,11 @@ if __name__ == "__main__":
     )
     exec_parser.set_defaults(func=exec_cmd)
     exec_parser.add_argument("--env", nargs="*", default=[])
+    exec_parser.add_argument(
+        "--stop-after",
+        action="store_true",
+        help="stop the container after execution completes"
+    )
 
     start_parser = subparsers.add_parser(
         "start",
@@ -297,6 +315,13 @@ if __name__ == "__main__":
     parsed = parser.parse_args(sys.argv[1:])
 
     if hasattr(parsed, "env"):
-        parsed.func(parsed.series, parsed.command, *parsed.env)
+        parsed.func(
+            parsed.series,
+            parsed.command,
+            parsed.stop_after,
+            *parsed.env
+        )
+    elif hasattr(parsed, "stop_after"):
+        parsed.func(parsed.series, parsed.stop_after)
     else:
         parsed.func(parsed.series)
