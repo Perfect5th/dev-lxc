@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble"]
+DAILY_SERIES = None
 
 
 def create(series: str, config: str = ""):
@@ -12,7 +13,7 @@ def create(series: str, config: str = ""):
     instance_name = os.path.basename(proj_dir) + f"-{series}"
     uid = os.getuid()
 
-    if series == SERIES[-1]:
+    if series == DAILY_SERIES:
         remote = "ubuntu-daily"
     else:
         remote = "ubuntu"
