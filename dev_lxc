@@ -1,82 +1,20 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import random
+import string
 import subprocess
 import sys
 
-SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble"]
-DAILY_SERIES = None
+SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble", "oracular"]
+DAILY_SERIES = "oracular"
 
 
 def create(series: str, config: str = ""):
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
-    uid = os.getuid()
 
-    if series == DAILY_SERIES:
-        remote = "ubuntu-daily"
-    else:
-        remote = "ubuntu"
-
-    # If we can check instance info, we know it already exists.
-    info_call = subprocess.run(
-        ["lxc", "info", instance_name],
-        capture_output=True,
-    )
-
-    if info_call.returncode == 0:
-        print(f"ERROR: Instance {instance_name} already exists")
-        sys.exit(4)
-
-    if config:
-        try:
-            with open(config, "rb") as config_fp:
-                config_input = config_fp.read()
-        except OSError as e:
-            print(f"ERROR: Could not read LXD config from {config}: {e}")
-            sys.exit(4)
-    else:
-        config_input = None
-
-    # Create the instance using the appropriate config.
-    subprocess.run(
-        [
-            "lxc",
-            "launch",
-            f"{remote}:{series}",
-            instance_name,
-            "--config",
-            f"raw.idmap=both {uid} 1000",
-        ],
-        input=config_input,
-        check=True,
-    )
-
-    # Wait for cloud-init to finish.
-    print(
-        f"Waiting for {instance_name} to complete initialization and package installation"
-        " (this might take awhile)"
-    )
-    subprocess.run(
-        ["lxc", "exec", instance_name, "--", "cloud-init", "status", "--wait"],
-    )
-
-    # Mount the filesystem.
-    lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
-    subprocess.run(
-        [
-            "lxc",
-            "config",
-            "device",
-            "add",
-            instance_name,
-            f"{instance_name}-src",
-            "disk",
-            f"source={os.getcwd()}",
-            f"path={lxc_repo_path}",
-        ],
-        check=True,
-    )
+    _create_container(instance_name, series, config)
 
     print("All done! ✨ 🍰 ✨")
     print(
@@ -122,27 +60,19 @@ def remove(series: str):
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
-    result = subprocess.run(
-        [
-            "lxc",
-            "delete",
-            "--force",
-            instance_name,
-        ],
-    )
-
-    if result.returncode:
-        # Output from the above goes to stdout/err so it should be apparent
-        # what the error was.
-        print(f"Unable to remove instance {instance_name}")
-    else:
-        print(f"Removed instance {instance_name}")
+    _remove(instance_name)
 
 
-def exec_cmd(series: str, command: str, stop_after: bool, *env_args):
+def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env_args):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    if emphemeral:
+        ident = "".join(random.sample(string.ascii_lowercase, 12))
+        instance_name = os.path.basename(proj_dir) + f"-{series}-{ident}"
+        _create_container(instance_name, series)
+    else:
+        instance_name = os.path.basename(proj_dir) + f"-{series}"
 
     _start_if_stopped(instance_name)
 
@@ -175,9 +105,13 @@ def exec_cmd(series: str, command: str, stop_after: bool, *env_args):
     else:
         print("Command execution completed successfully")
 
-    if stop_after:
+    if stop_after or emphemeral:
         print(f"Stopping {instance_name}")
-        stop(series)
+        _stop(instance_name)
+
+    if emphemeral:
+        print(f"Removing {instance_name}")
+        _remove(instance_name)
 
 
 def start(series: str) -> None:
@@ -191,7 +125,81 @@ def stop(series: str) -> None:
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
-    subprocess.run(["lxc", "stop", instance_name])
+    _stop(instance_name)
+
+
+def _create_container(
+    instance_name: str,
+    series: str,
+    config: str = "",
+) -> None:
+    """Creates a new container with the given `instance_name`."""
+    proj_dir = os.path.basename(os.getcwd())
+    uid = os.getuid()
+
+    if series == DAILY_SERIES:
+        remote = "ubuntu-daily"
+    else:
+        remote = "ubuntu"
+
+    # If we can check instance info, we know it already exists.
+    info_call = subprocess.run(
+        ["lxc", "info", instance_name],
+        capture_output=True,
+    )
+
+    if info_call.returncode == 0:
+        print(f"ERROR: Instance {instance_name} already exists")
+        sys.exit(4)
+
+    if config:
+        try:
+            with open(config, "rb") as config_fp:
+                config_input = config_fp.read()
+        except OSError as e:
+            print(f"ERROR: Could not read LXD config from {config}: {e}")
+    else:
+        config_input = None
+
+    # Create the instance using the appropriate config.
+    subprocess.run(
+        [
+            "lxc",
+            "launch",
+            f"{remote}:{series}",
+            instance_name,
+            "--config",
+            f"raw.idmap=both {uid} 1000",
+        ],
+        input=config_input,
+        check=True,
+    )
+
+    # Wait for cloud-init to finish.
+    print(
+        f"Waiting for {instance_name} to complete initialization and package installation"
+        " (this might take awhile)"
+    )
+    subprocess.run(
+        ["lxc", "exec", instance_name, "--", "cloud-init", "status", "--wait"],
+    )
+
+    # Mount the filesystem.
+    lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
+    subprocess.run(
+        [
+            "lxc",
+            "config",
+            "device",
+            "add",
+            instance_name,
+            f"{instance_name}-src",
+            "disk",
+            f"source={os.getcwd()}",
+            f"path={lxc_repo_path}",
+        ],
+        check=True,
+    )
 
 
 def _get_status(instance_name: str) -> str:
@@ -225,6 +233,24 @@ def _get_status(instance_name: str) -> str:
     return "UNKNOWN"
 
 
+def _remove(instance_name: str) -> None:
+    result = subprocess.run(
+        [
+            "lxc",
+            "delete",
+            "--force",
+            instance_name,
+        ],
+    )
+
+    if result.returncode:
+        # Output from the above goes to stdout/err so it should be apparent
+        # what the error was.
+        print(f"Unable to remove instance {instance_name}")
+    else:
+        print(f"Removed instance {instance_name}")
+
+
 def _start_if_stopped(instance_name: str) -> None:
     """Starts the LXD instance with name `instance_name` if it is not running.
     """
@@ -233,6 +259,10 @@ def _start_if_stopped(instance_name: str) -> None:
     if status == "STOPPED":
         print(f"Starting {instance_name}")
         subprocess.run(["lxc", "start", instance_name])
+
+
+def _stop(instance_name: str) -> None:
+    subprocess.run(["lxc", "stop", instance_name])
 
 
 if __name__ == "__main__":
@@ -275,7 +305,12 @@ if __name__ == "__main__":
     exec_parser.add_argument(
         "--stop-after",
         action="store_true",
-        help="stop the container after execution completes"
+        help="stop the container after execution completes",
+    )
+    exec_parser.add_argument(
+        "--ephemeral",
+        action="store_true",
+        help="use a temporary container that is deleted afterwards",
     )
 
     start_parser = subparsers.add_parser(
@@ -320,6 +355,7 @@ if __name__ == "__main__":
             parsed.series,
             parsed.command,
             parsed.stop_after,
+            parsed.ephemeral,
             *parsed.env
         )
     elif hasattr(parsed, "stop_after"):
