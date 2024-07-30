@@ -360,5 +360,7 @@ if __name__ == "__main__":
         )
     elif hasattr(parsed, "stop_after"):
         parsed.func(parsed.series, parsed.stop_after)
+    elif hasattr(parsed, "config"):
+        parsed.func(parsed.series, parsed.config)
     else:
         parsed.func(parsed.series)
