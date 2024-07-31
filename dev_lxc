@@ -6,6 +6,12 @@ import string
 import subprocess
 import sys
 
+try:
+    import yaml
+    PY_YAML = True
+except ImportError:
+    PY_YAML = False
+
 SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble", "oracular"]
 DAILY_SERIES = "oracular"
 
@@ -15,6 +21,7 @@ def create(series: str, config: str = ""):
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
     _create_container(instance_name, series, config)
+    _exec_config(series, config)
 
     print("All done! ✨ 🍰 ✨")
     print(
@@ -126,6 +133,39 @@ def stop(series: str) -> None:
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
     _stop(instance_name)
+
+
+def _exec_config(series: str, config: str = "") -> None:
+    """Executes the `dev-lxc-exec` section of `config` in the container for `series`."""
+    if not config:
+        return
+
+    if not PY_YAML:
+        print("PyYAML is not installed, skipping post-creation dev-lxc-exec")
+        return
+
+    with open(config) as config_fp:
+        try:
+            config_dict = yaml.safe_load(config_fp)
+        except yaml.YAMLError as e:
+            print(f"ERROR: Could not parse YAML from {config}: {e}")
+            return
+
+    if "dev-lxc-exec" not in config_dict:
+        return
+
+    dev_lxc_exec = config_dict["dev-lxc-exec"]
+
+    if not isinstance(dev_lxc_exec, (str, list)):
+        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings")
+        return
+
+    if isinstance(dev_lxc_exec, str):
+        dev_lxc_exec = [dev_lxc_exec]
+
+    for command in dev_lxc_exec:
+        print(f"Executing: {command}")
+        exec_cmd(series, str(command), False, False)
 
 
 def _create_container(
