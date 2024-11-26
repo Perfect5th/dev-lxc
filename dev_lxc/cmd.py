@@ -12,8 +12,8 @@ try:
 except ImportError:
     PY_YAML = False
 
-SERIES = ["bionic", "focal", "jammy", "mantic", "lunar", "noble", "oracular"]
-DAILY_SERIES = "oracular"
+SERIES = ["bionic", "focal", "jammy", "noble", "oracular", "plucky"]
+DAILY_SERIES = "plucky"
 
 
 def create(series: str, config: str = ""):
@@ -305,7 +305,7 @@ def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(
         prog="dev_lxc",
         description="Create, shell into, and remove developer containers",
@@ -404,3 +404,7 @@ if __name__ == "__main__":
         parsed.func(parsed.series, parsed.config)
     else:
         parsed.func(parsed.series)
+
+
+if __name__ == "__main__":
+    main()
