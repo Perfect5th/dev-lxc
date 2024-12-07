@@ -16,11 +16,11 @@ SERIES = ["bionic", "focal", "jammy", "noble", "oracular", "plucky"]
 DAILY_SERIES = "plucky"
 
 
-def create(series: str, config: str = ""):
+def create(series: str, config: str = "", profile: str = ""):
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
-    _create_container(instance_name, series, config)
+    _create_container(instance_name, series, config, profile)
     _exec_config(series, config)
 
     print("All done! ✨ 🍰 ✨")
@@ -172,6 +172,7 @@ def _create_container(
     instance_name: str,
     series: str,
     config: str = "",
+    profile: str = "",
 ) -> None:
     """Creates a new container with the given `instance_name`."""
     proj_dir = os.path.basename(os.getcwd())
@@ -198,22 +199,24 @@ def _create_container(
                 config_input = config_fp.read()
         except OSError as e:
             print(f"ERROR: Could not read LXD config from {config}: {e}")
+            config_input = None
     else:
         config_input = None
 
     # Create the instance using the appropriate config.
-    subprocess.run(
-        [
-            "lxc",
-            "launch",
-            f"{remote}:{series}",
-            instance_name,
-            "--config",
-            f"raw.idmap=both {uid} 1000",
-        ],
-        input=config_input,
-        check=True,
-    )
+    cmd = [
+        "lxc",
+        "launch",
+        f"{remote}:{series}",
+        instance_name,
+        "--config",
+        f"raw.idmap=both {uid} 1000",
+    ]
+
+    if profile:
+        cmd.extend(["--profile", profile])
+
+    subprocess.run(cmd, input=config_input, check=True)
 
     # Wait for cloud-init to finish.
     print(
@@ -250,7 +253,7 @@ def _get_status(instance_name: str) -> str:
             ["lxc", "info", instance_name],
             capture_output=True,
             check=True,
-            text=True
+            text=True,
         )
     except subprocess.CalledProcessError as e:
         if "Instance not found" in e.stderr:
@@ -292,8 +295,7 @@ def _remove(instance_name: str) -> None:
 
 
 def _start_if_stopped(instance_name: str) -> None:
-    """Starts the LXD instance with name `instance_name` if it is not running.
-    """
+    """Starts the LXD instance with name `instance_name` if it is not running."""
     status = _get_status(instance_name)
 
     if status == "STOPPED":
@@ -327,7 +329,7 @@ def main():
     shell_parser.add_argument(
         "--stop-after",
         action="store_true",
-        help="stop the container after the exiting the shell"
+        help="stop the container after the exiting the shell",
     )
 
     remove_parser = subparsers.add_parser(
@@ -384,8 +386,16 @@ def main():
         "-c",
         "--config",
         type=str,
-        help="An LXD config to configure the instance",
+        help="The path to a LXD config to apply to the instance",
     )
+
+    create_parser.add_argument(
+        "-p",
+        "--profile",
+        type=str,
+        help="The name of a LXD profile to apply to the instance",
+    )
+
     exec_parser.add_argument("command", type=str, help="The command to execute")
 
     parsed = parser.parse_args(sys.argv[1:])
@@ -396,14 +406,14 @@ def main():
             parsed.command,
             parsed.stop_after,
             parsed.ephemeral,
-            *parsed.env
+            *parsed.env,
         )
     elif hasattr(parsed, "stop_after"):
         parsed.func(parsed.series, parsed.stop_after)
     elif hasattr(parsed, "config"):
-        parsed.func(parsed.series, parsed.config)
+        parsed.func(parsed.series, parsed.config, parsed.profile)
     else:
-        parsed.func(parsed.series)
+        parsed.func(parsed.series, parsed.profile)
 
 
 if __name__ == "__main__":
