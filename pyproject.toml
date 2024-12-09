@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dev-lxc"
-version = "0.2.0"
+version = "0.3.0"
 description = "A small wrapper for creating LXD system containers for development purposes."
 authors = ["Mitch Burton <mitch@mitchellburton.ca>"]
 maintainers = ["Mitch Burton <mitch@mitchellburton.ca>"]
