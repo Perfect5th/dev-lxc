@@ -413,7 +413,7 @@ def main():
     elif hasattr(parsed, "config"):
         parsed.func(parsed.series, parsed.config, parsed.profile)
     else:
-        parsed.func(parsed.series, parsed.profile)
+        parsed.func(parsed.series)
 
 
 if __name__ == "__main__":
