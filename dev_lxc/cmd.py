@@ -8,31 +8,41 @@ import sys
 
 try:
     import yaml
+
     PY_YAML = True
 except ImportError:
     PY_YAML = False
 
 SERIES = ["bionic", "focal", "jammy", "noble", "oracular", "plucky"]
 DAILY_SERIES = "plucky"
+SHELLS = ["bash", "zsh", "fish", "nu"]
 
 
-def create(series: str, config: str = "", profile: str = ""):
+def create(series: str, config: str = "", profile: str = "", shell: str = "bash"):
+    if shell not in SHELLS:
+        print(f"ERROR: Unsupported shell: {shell}")
+        sys.exit(1)
+        
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
-    _create_container(instance_name, series, config, profile)
+    _create_container(instance_name, series, config, profile, shell)
     _exec_config(series, config)
 
     print("All done! ✨ 🍰 ✨")
     print(
         f"""
 Jump into your new instance with:
-    dev_lxc shell {series}
+    dev_lxc shell {series} {f"--shell {shell}" if shell != "bash" else ""}
 """
     )
 
 
-def shell(series: str, stop_after: bool):
+def shell(series: str, stop_after: bool, shell: str = "bash"):
+    if shell not in SHELLS:
+        print(f"ERROR: Unsupported shell: {shell}")
+        sys.exit(1)
+
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
     instance_name = os.path.basename(proj_dir) + f"-{series}"
@@ -54,7 +64,7 @@ def shell(series: str, stop_after: bool):
             "--env",
             "USER=ubuntu",
             instance_name,
-            "bash",
+            shell,
         ],
     )
 
@@ -70,7 +80,18 @@ def remove(series: str):
     _remove(instance_name)
 
 
-def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env_args):
+def exec_cmd(
+    series: str,
+    command: str,
+    stop_after: bool,
+    emphemeral: bool,
+    shell="bash",
+    *env_args,
+):
+    if shell not in SHELLS:
+        print(f"ERROR: Unsupported shell: {shell}")
+        sys.exit(1)
+
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
 
@@ -103,7 +124,7 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
         run_args.append("--env")
         run_args.append(env_arg)
 
-    run_args += ["--", "bash", "-c", command]
+    run_args += ["--", shell, "-c", command]
 
     result = subprocess.run(run_args)
 
@@ -157,7 +178,9 @@ def _exec_config(series: str, config: str = "") -> None:
     dev_lxc_exec = config_dict["dev-lxc-exec"]
 
     if not isinstance(dev_lxc_exec, (str, list)):
-        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings")
+        print(
+            f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings"
+        )
         return
 
     if isinstance(dev_lxc_exec, str):
@@ -173,6 +196,7 @@ def _create_container(
     series: str,
     config: str = "",
     profile: str = "",
+    shell: str = "bash",
 ) -> None:
     """Creates a new container with the given `instance_name`."""
     proj_dir = os.path.basename(os.getcwd())
@@ -243,6 +267,81 @@ def _create_container(
         ],
         check=True,
     )
+
+    # Install shell if not bash
+    match shell:
+        case "bash":
+            pass
+        case "zsh":
+            subprocess.run(
+                [
+                    "lxc",
+                    "exec",
+                    instance_name,
+                    "--",
+                    "sudo",
+                    "apt",
+                    "install",
+                    "-y",
+                    "zsh",
+                ]
+            )
+        case "fish":
+            subprocess.run(
+                [
+                    "lxc",
+                    "exec",
+                    instance_name,
+                    "--",
+                    "sudo",
+                    "add-apt-repository",
+                    "-y",
+                    "ppa:fish-shell/release-4",
+                ]
+            )
+            subprocess.run(
+                ["lxc", "exec", instance_name, "--", "sudo", "apt", "update"]
+            )
+            subprocess.run(
+                [
+                    "lxc",
+                    "exec",
+                    instance_name,
+                    "--",
+                    "sudo",
+                    "apt",
+                    "install",
+                    "-y",
+                    "fish",
+                ]
+            )
+        case "nu":
+            subprocess.run(
+                [
+                    "lxc",
+                    "exec",
+                    instance_name,
+                    "--",
+                    "bash",
+                    "-c",
+                    "curl -fsSL https://apt.fury.io/nushell/gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/fury-nushell.gpg && "
+                    'echo "deb https://apt.fury.io/nushell/ /" | sudo tee /etc/apt/sources.list.d/fury.list && '
+                    "sudo apt update && sudo apt install -y nushell",
+                ]
+            )
+
+    res = subprocess.run([
+        "lxc", "exec", instance_name, "--", "which", shell
+    ], capture_output=True, text=True)
+
+    if res.returncode == 0:
+        shell_path = res.stdout.strip()
+        subprocess.run([
+            "lxc", "exec", instance_name, "--", 
+            "sudo", "chsh", "ubuntu", "-s", shell_path
+        ])
+    else:
+        print(f"Warning: {shell} not found, keeping bash as default")
 
 
 def _get_status(instance_name: str) -> str:
@@ -331,6 +430,11 @@ def main():
         action="store_true",
         help="stop the container after the exiting the shell",
     )
+    shell_parser.add_argument(
+        "--shell",
+        default="bash",
+        help="the shell to create the session with. It must be installed in the container already.",
+    )
 
     remove_parser = subparsers.add_parser(
         "remove",
@@ -396,6 +500,16 @@ def main():
         help="The name of a LXD profile to apply to the instance",
     )
 
+    shell_args = {
+        "dest": "shell",
+        "type": str,
+        "help": "The name of the shell to use in the instance",
+        "default": "bash",
+    }
+
+    create_parser.add_argument("-s", "--shell", **shell_args)
+    exec_parser.add_argument("-s", "--shell", **shell_args)
+
     exec_parser.add_argument("command", type=str, help="The command to execute")
 
     parsed = parser.parse_args(sys.argv[1:])
@@ -406,12 +520,20 @@ def main():
             parsed.command,
             parsed.stop_after,
             parsed.ephemeral,
+            shell=parsed.shell,
             *parsed.env,
         )
     elif hasattr(parsed, "stop_after"):
-        parsed.func(parsed.series, parsed.stop_after)
+        if hasattr(parsed, "shell"):
+            parsed.func(parsed.series, parsed.stop_after, parsed.shell)
+        else:
+            parsed.func(parsed.series, parsed.stop_after)
+
     elif hasattr(parsed, "config"):
-        parsed.func(parsed.series, parsed.config, parsed.profile)
+        if hasattr(parsed, "shell"):
+            parsed.func(parsed.series, parsed.config, parsed.profile, parsed.shell)
+        else:
+            parsed.func(parsed.series, parsed.config, parsed.profile)
     else:
         parsed.func(parsed.series)
 
