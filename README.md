@@ -30,7 +30,7 @@ Once you've created an instance, you can spin up a shell in it:
 
 The default user (`ubuntu`) should be uid-mapped to your user, so file permissions should be okay.
 
-If another shell is installed, you can use it by providing it with the `--shell` flag.
+If another shell is installed, you can use it with the `--shell` flag.
 
 For example:
 
@@ -44,7 +44,7 @@ This executes using `bash` by default. You can also provide environment variable
 
     dev_lxc exec jammy 'echo "hello $MITCH"' --env MITCH="mitchell"
 
-If another shell is installed, you can execute the command with it using `--shell` flag:
+If another shell is installed, you can execute the command with it using the `--shell` flag:
 
     dev_lxc exec jammy --shell fish 'status current-command'
 
