@@ -1,0 +1,8 @@
+config:
+  user.user-data: |
+    #cloud-config
+    packages:
+      - zsh
+    users:
+      - name: ubuntu
+        shell: /usr/bin/zsh

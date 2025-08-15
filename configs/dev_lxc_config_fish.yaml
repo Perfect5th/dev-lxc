@@ -1,0 +1,12 @@
+config:
+  user.user-data: |
+    #cloud-config
+    apt:
+      sources:
+        fish-ppa:
+          source: "ppa:fish-shell/release-4"
+    packages:
+      - fish
+    users:
+      - name: ubuntu
+        shell: /usr/bin/fish
