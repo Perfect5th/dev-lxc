@@ -420,12 +420,11 @@ def _create_app_directory(path: pathlib.Path, default_shells: list[DefaultShell]
 
     for shell in default_shells:
         conf_path = path / "configs" / shell.config_name
-        if not conf_path.exists():
-            try:
-                conf_path.write_text(shell.cloud_init_contents)
-            except PermissionError:
-                print(f"Permission denied: cannot create {conf_path}. Try with sudo.")
-                exit(1)
+        try:
+            conf_path.write_text(shell.cloud_init_contents)
+        except PermissionError:
+            print(f"Permission denied: cannot create {conf_path}. Try with sudo.")
+            exit(1)
 
 
 def main():
