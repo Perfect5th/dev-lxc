@@ -20,6 +20,13 @@ If you have a valid YAML file for configuring the instance (nice for if you want
 
     dev_lxc create jammy --config ./my-config.yaml
 
+You can also create the instance with a default shell other than `bash` by passing the `--shell` option. Currently. `fish`, `nu`, and `zsh` are supported. For example, to create container with `fish` installed and set as the default shell:
+
+    dev_lxc create jammy --shell fish
+
+> [!WARNING]
+> If a custom config is passed with `--config`, `--shell` will be ignored.
+
 ### Open a shell in an instance
 
 Once you've created an instance, you can spin up a shell in it:
@@ -28,13 +35,23 @@ Once you've created an instance, you can spin up a shell in it:
 
 The default user (`ubuntu`) should be uid-mapped to your user, so file permissions should be okay.
 
+If another shell is installed, you can use it with the `--shell` flag.
+
+For example:
+
+    dev_lxc shell jammy --shell zsh
+
 ### Exec a command in an instance
 
     dev_lxc exec jammy 'echo "hello"'
 
-This executes using `bash`, so try not to get too fancy. You can also provide environment variables:
+This executes using `bash` by default. You can also provide environment variables:
 
     dev_lxc exec jammy 'echo "hello $MITCH"' --env MITCH="mitchell"
+
+If another shell is installed, you can execute the command with it using the `--shell` flag:
+
+    dev_lxc exec jammy --shell fish 'status current-command'
 
 ### Stop or Start an instance
 
@@ -52,5 +69,5 @@ Starts it up again.
 
 This deletes the instance. It is gone for good.
 
-   [1]: https://canonical.com/lxd
-   [2]: https://canonical.com/lxd/install
+[1]: https://canonical.com/lxd
+[2]: https://canonical.com/lxd/install

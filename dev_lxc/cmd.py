@@ -1,38 +1,127 @@
 #!/usr/bin/env python3
 import argparse
+from enum import Enum
 import os
+import pathlib
 import random
 import string
 import subprocess
 import sys
+from dataclasses import dataclass
 
 try:
     import yaml
+
     PY_YAML = True
 except ImportError:
     PY_YAML = False
 
 SERIES = ["bionic", "focal", "jammy", "noble", "oracular", "plucky"]
 DAILY_SERIES = "plucky"
+CONFIG_DIR_PATH = pathlib.Path.home() / ".dev_lxc"
+FISH_CLOUD_INIT = """
+config:
+  user.user-data: |
+    #cloud-config
+    apt:
+      sources:
+        fish-ppa:
+          source: "ppa:fish-shell/release-4"
+    packages:
+      - fish
+    users:
+      - name: ubuntu
+        shell: /usr/bin/fish
+        sudo: ALL=(ALL) NOPASSWD:ALL
+"""
+NU_CLOUD_INIT = """
+config:
+  user.user-data: |
+    #cloud-config
+    runcmd:
+      - curl -fsSL https://apt.fury.io/nushell/gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/fury-nushell.gpg
+      - echo "deb https://apt.fury.io/nushell/ /" | tee /etc/apt/sources.list.d/fury.list
+      - apt update
+      - apt install -y nushell
+    users:
+      - name: ubuntu
+        shell: /usr/bin/nu
+        sudo: ALL=(ALL) NOPASSWD:ALL
+"""
+ZSH_CLOUD_INIT = """
+config:
+  user.user-data: |
+    #cloud-config
+    packages:
+      - zsh
+    users:
+      - name: ubuntu
+        shell: /usr/bin/zsh
+        sudo: ALL=(ALL) NOPASSWD:ALL
+"""
+DEFAULT_CLOUD_INITS = {
+    "fish": FISH_CLOUD_INIT,
+    "nu": NU_CLOUD_INIT,
+    "zsh": ZSH_CLOUD_INIT,
+}
+"""
+shell: contents
+"""
 
 
-def create(series: str, config: str = "", profile: str = ""):
+class Shell(str, Enum):
+    BASH = "bash"
+    FISH = "fish"
+    NU = "nu"
+    ZSH = "zsh"
+
+
+@dataclass
+class DefaultShell:
+    name: str
+    config_name: str
+    cloud_init_contents: str
+
+
+DEFAULT_SHELLS: dict[str, DefaultShell] = {
+    s.value: DefaultShell(
+        name=s.value,
+        config_name=f"{s.value}_config.yaml",
+        cloud_init_contents=DEFAULT_CLOUD_INITS.get(s.value, ""),
+    )
+    for s in Shell
+    if s.value != "bash" and DEFAULT_CLOUD_INITS.get(s.value)
+}
+
+
+def create(
+    series: str, config: str = "", profile: str = "", shell: str = Shell.BASH.value
+):
+    try:
+        shell_enum = Shell(shell)
+    except ValueError:
+        print(
+            f"unknown default shell: {shell}. Pass a custom config instead with --config."
+        )
+        exit(1)
+
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
 
-    _create_container(instance_name, series, config, profile)
+    _create_container(instance_name, series, config, profile, shell_enum)
     _exec_config(series, config)
 
     print("All done! ✨ 🍰 ✨")
     print(
         f"""
 Jump into your new instance with:
-    dev_lxc shell {series}
+    dev_lxc shell {series} {f"--shell {shell}" if shell != "bash" else ""}
+
 """
     )
 
 
-def shell(series: str, stop_after: bool):
+def shell(series: str, stop_after: bool, shell: str = Shell.BASH.value):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
     instance_name = os.path.basename(proj_dir) + f"-{series}"
@@ -54,7 +143,7 @@ def shell(series: str, stop_after: bool):
             "--env",
             "USER=ubuntu",
             instance_name,
-            "bash",
+            shell,
         ],
     )
 
@@ -70,7 +159,14 @@ def remove(series: str):
     _remove(instance_name)
 
 
-def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env_args):
+def exec_cmd(
+    series: str,
+    command: str,
+    stop_after: bool,
+    emphemeral: bool,
+    shell="bash",
+    *env_args,
+):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
 
@@ -103,7 +199,7 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
         run_args.append("--env")
         run_args.append(env_arg)
 
-    run_args += ["--", "bash", "-c", command]
+    run_args += ["--", shell, "-c", command]
 
     result = subprocess.run(run_args)
 
@@ -157,7 +253,9 @@ def _exec_config(series: str, config: str = "") -> None:
     dev_lxc_exec = config_dict["dev-lxc-exec"]
 
     if not isinstance(dev_lxc_exec, (str, list)):
-        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings")
+        print(
+            f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings"
+        )
         return
 
     if isinstance(dev_lxc_exec, str):
@@ -173,6 +271,7 @@ def _create_container(
     series: str,
     config: str = "",
     profile: str = "",
+    shell_enum: Shell = Shell.BASH,
 ) -> None:
     """Creates a new container with the given `instance_name`."""
     proj_dir = os.path.basename(os.getcwd())
@@ -202,6 +301,10 @@ def _create_container(
             config_input = None
     else:
         config_input = None
+
+    if not config and shell_enum.value in DEFAULT_SHELLS:
+        default_shell = DEFAULT_SHELLS[shell_enum.value]
+        config_input = default_shell.cloud_init_contents.encode()
 
     # Create the instance using the appropriate config.
     cmd = [
@@ -307,7 +410,26 @@ def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
 
 
+def _create_app_directory(path: pathlib.Path, default_shells: list[DefaultShell]):
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "configs").mkdir(exist_ok=True)
+    except PermissionError as e:
+        print(f"Permission denied: cannot create directories. Try with sudo.")
+        exit(1)
+
+    for shell in default_shells:
+        conf_path = path / "configs" / shell.config_name
+        try:
+            conf_path.write_text(shell.cloud_init_contents)
+        except PermissionError:
+            print(f"Permission denied: cannot create {conf_path}. Try with sudo.")
+            exit(1)
+
+
 def main():
+    _create_app_directory(CONFIG_DIR_PATH, default_shells=list(DEFAULT_SHELLS.values()))
+
     parser = argparse.ArgumentParser(
         prog="dev_lxc",
         description="Create, shell into, and remove developer containers",
@@ -330,6 +452,11 @@ def main():
         "--stop-after",
         action="store_true",
         help="stop the container after the exiting the shell",
+    )
+    shell_parser.add_argument(
+        "--shell",
+        default="bash",
+        help="the shell to create the session with. It must be installed in the container already.",
     )
 
     remove_parser = subparsers.add_parser(
@@ -396,6 +523,16 @@ def main():
         help="The name of a LXD profile to apply to the instance",
     )
 
+    shell_args = {
+        "dest": "shell",
+        "type": str,
+        "help": "The name of the shell to use in the instance",
+        "default": "bash",
+    }
+    create_parser.add_argument("-s", "--shell", **shell_args)
+
+    exec_parser.add_argument("-s", "--shell", **shell_args)
+
     exec_parser.add_argument("command", type=str, help="The command to execute")
 
     parsed = parser.parse_args(sys.argv[1:])
@@ -406,12 +543,20 @@ def main():
             parsed.command,
             parsed.stop_after,
             parsed.ephemeral,
+            shell=parsed.shell,
             *parsed.env,
         )
     elif hasattr(parsed, "stop_after"):
-        parsed.func(parsed.series, parsed.stop_after)
+        if hasattr(parsed, "shell"):
+            parsed.func(parsed.series, parsed.stop_after, parsed.shell)
+        else:
+            parsed.func(parsed.series, parsed.stop_after)
+
     elif hasattr(parsed, "config"):
-        parsed.func(parsed.series, parsed.config, parsed.profile)
+        if hasattr(parsed, "shell"):
+            parsed.func(parsed.series, parsed.config, parsed.profile, parsed.shell)
+        else:
+            parsed.func(parsed.series, parsed.config, parsed.profile)
     else:
         parsed.func(parsed.series)
 
