@@ -20,7 +20,12 @@ If you have a valid YAML file for configuring the instance (nice for if you want
 
     dev_lxc create jammy --config ./my-config.yaml
 
-Sample configs are provided in `/configs` that create the container with a custom default shell.
+You can also create the instance with a default shell other than `bash` by passing the `--shell` option. Currently. `fish`, `nu`, and `zsh` are supported. For example, to create container with `fish` installed and set as the default shell:
+
+    dev_lxc create jammy --shell fish
+
+> [!WARNING]
+> If a custom config is passed with `--config`, `--shell` will be ignored.
 
 ### Open a shell in an instance
 
@@ -64,5 +69,5 @@ Starts it up again.
 
 This deletes the instance. It is gone for good.
 
-   [1]: https://canonical.com/lxd
-   [2]: https://canonical.com/lxd/install
+[1]: https://canonical.com/lxd
+[2]: https://canonical.com/lxd/install

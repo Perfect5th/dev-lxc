@@ -32,6 +32,7 @@ config:
     users:
       - name: ubuntu
         shell: /usr/bin/fish
+        sudo: ALL=(ALL) NOPASSWD:ALL
 """
 NU_CLOUD_INIT = """
 config:
@@ -42,6 +43,10 @@ config:
       - echo "deb https://apt.fury.io/nushell/ /" | tee /etc/apt/sources.list.d/fury.list
       - apt update
       - apt install -y nushell
+    users:
+      - name: ubuntu
+        shell: /usr/bin/nu
+        sudo: ALL=(ALL) NOPASSWD:ALL
 """
 ZSH_CLOUD_INIT = """
 config:
@@ -52,6 +57,7 @@ config:
     users:
       - name: ubuntu
         shell: /usr/bin/zsh
+        sudo: ALL=(ALL) NOPASSWD:ALL
 """
 DEFAULT_CLOUD_INITS = {
     "fish": FISH_CLOUD_INIT,
@@ -407,30 +413,18 @@ def _stop(instance_name: str) -> None:
 def _create_app_directory(path: pathlib.Path, default_shells: list[DefaultShell]):
     try:
         path.mkdir(parents=True, exist_ok=True)
-    except PermissionError:
-        print(f"Permission denied: cannot create directory at: {path}. Try with sudo.")
-        exit(1)
-
-    configs_path = path / "configs"
-
-    try:
-        configs_path.mkdir(exist_ok=True)
-    except PermissionError:
-        print(
-            f"Permission denied: cannot create configs directory at: {configs_path}. Try with sudo."
-        )
+        (path / "configs").mkdir(exist_ok=True)
+    except PermissionError as e:
+        print(f"Permission denied: cannot create directories. Try with sudo.")
         exit(1)
 
     for shell in default_shells:
-        conf_path = configs_path / shell.config_name
+        conf_path = path / "configs" / shell.config_name
         if not conf_path.exists():
             try:
-                with open(conf_path, "w") as f:
-                    f.write(shell.cloud_init_contents)
+                conf_path.write_text(shell.cloud_init_contents)
             except PermissionError:
-                print(
-                    f"Permission denied: cannot create config file: {conf_path}. Try with sudo."
-                )
+                print(f"Permission denied: cannot create {conf_path}. Try with sudo.")
                 exit(1)
 
 
