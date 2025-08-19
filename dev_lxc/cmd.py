@@ -11,12 +11,11 @@ import sys
 
 try:
     import yaml
-    PY_YAML = True
 except ImportError:
-    PY_YAML = False
+    yaml = None
 
-SERIES = ["bionic", "focal", "jammy", "noble", "oracular", "plucky"]
-DAILY_SERIES = "plucky"
+SERIES = ["bionic", "focal", "jammy", "noble", "plucky", "questing"]
+DAILY_SERIES = "questing"
 
 
 def create(series: str, config: str = "", profile: str = ""):
@@ -143,7 +142,7 @@ def _exec_config(series: str, config: str = "") -> None:
     if not config:
         return
 
-    if not PY_YAML:
+    if yaml is None:
         print("PyYAML is not installed, skipping post-creation dev-lxc-exec")
         return
 
