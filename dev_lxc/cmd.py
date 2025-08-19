@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2025 Mitch Burton
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
 import random
