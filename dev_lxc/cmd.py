@@ -17,10 +17,16 @@ except ImportError:
 SERIES = ["bionic", "focal", "jammy", "noble", "plucky", "questing"]
 DAILY_SERIES = "questing"
 
+CONFIG_DOTDIR = ".dev-lxc"
+DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
+
 
 def create(series: str, config: str = "", profile: str = ""):
     proj_dir = os.path.basename(os.getcwd())
     instance_name = os.path.basename(proj_dir) + f"-{series}"
+
+    if config:
+        print("Using config " + config)
 
     _create_container(instance_name, series, config, profile)
     _exec_config(series, config)
@@ -110,7 +116,7 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
     result = subprocess.run(run_args)
 
     if result.returncode:
-        print(f"Error running command {command} on instance {instance_name}")
+        print(f"Error running command {command} on instance {instance_name}", file=sys.stderr)
     else:
         print("Command execution completed successfully")
 
@@ -137,6 +143,37 @@ def stop(series: str) -> None:
     _stop(instance_name)
 
 
+def _discover_config(series: str) -> str:
+    """
+    Produces the filepath of a default config, if one is found.
+
+    Checks these locations in this order of priority:
+      1. `.dev-lxc/{series}.yaml`
+      2. `.dev-lxc/base.yaml`
+      3. `~/.dev-lxc/{series}.yaml`
+      4. `~/.dev-lxc/base.yaml`
+
+    Returns the path or an empty string if none of the above exist.
+    """
+    series_yaml = series + ".yaml"
+    home_dir = os.path.expanduser("~")
+
+    paths_to_check = (
+        os.path.join(*parts) for parts in (
+            (CONFIG_DOTDIR, series_yaml),
+            (CONFIG_DOTDIR, "base.yaml"),
+            (home_dir, CONFIG_DOTDIR, series_yaml),
+            (home_dir, CONFIG_DOTDIR, "base.yaml"),
+        )
+    )
+
+    for path in paths_to_check:
+        if os.path.isfile(path):
+            return path
+
+    return ""
+
+
 def _exec_config(series: str, config: str = "") -> None:
     """Executes the `dev-lxc-exec` section of `config` in the container for `series`."""
     if not config:
@@ -150,7 +187,7 @@ def _exec_config(series: str, config: str = "") -> None:
         try:
             config_dict = yaml.safe_load(config_fp)
         except yaml.YAMLError as e:
-            print(f"ERROR: Could not parse YAML from {config}: {e}")
+            print(f"ERROR: Could not parse YAML from {config}: {e}", file=sys.stderr)
             return
 
     if "dev-lxc-exec" not in config_dict:
@@ -159,7 +196,7 @@ def _exec_config(series: str, config: str = "") -> None:
     dev_lxc_exec = config_dict["dev-lxc-exec"]
 
     if not isinstance(dev_lxc_exec, (str, list)):
-        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings")
+        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings", file=sys.stderr)
         return
 
     if isinstance(dev_lxc_exec, str):
@@ -192,7 +229,7 @@ def _create_container(
     )
 
     if info_call.returncode == 0:
-        print(f"ERROR: Instance {instance_name} already exists")
+        print(f"ERROR: Instance {instance_name} already exists", file=sys.stderr)
         sys.exit(4)
 
     if config:
@@ -200,7 +237,7 @@ def _create_container(
             with open(config, "rb") as config_fp:
                 config_input = config_fp.read()
         except OSError as e:
-            print(f"ERROR: Could not read LXD config from {config}: {e}")
+            print(f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr)
             config_input = None
     else:
         config_input = None
@@ -291,7 +328,7 @@ def _remove(instance_name: str) -> None:
     if result.returncode:
         # Output from the above goes to stdout/err so it should be apparent
         # what the error was.
-        print(f"Unable to remove instance {instance_name}")
+        print(f"Unable to remove instance {instance_name}", file=sys.stderr)
     else:
         print(f"Removed instance {instance_name}")
 
@@ -413,7 +450,7 @@ def main():
     elif hasattr(parsed, "stop_after"):
         parsed.func(parsed.series, parsed.stop_after)
     elif hasattr(parsed, "config"):
-        parsed.func(parsed.series, parsed.config, parsed.profile)
+        parsed.func(parsed.series, parsed.config or _discover_config(parsed.series), parsed.profile)
     else:
         parsed.func(parsed.series)
 
