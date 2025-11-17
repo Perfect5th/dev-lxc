@@ -14,8 +14,8 @@ try:
 except ImportError:
     yaml = None
 
-SERIES = ["bionic", "focal", "jammy", "noble", "plucky", "questing"]
-DAILY_SERIES = "questing"
+SERIES = ["bionic", "focal", "jammy", "noble", "questing"]
+DAILY_SERIES = "resolute"
 
 CONFIG_DOTDIR = ".dev-lxc"
 DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
