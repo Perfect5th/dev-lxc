@@ -365,20 +365,36 @@ def _check_name_exists(instance_name: str) -> tuple[bool, list[str]]:
         return False, []
 
 
-def _construct_instance_name(series: str) -> str:
+def _construct_instance_name(series: str) -> tuple[str, str]:
     """
     Creates instance_name variable, but checks whether instance name is unique
-    If not, allows user to specify which instance to act upon
+    If not, generates an alternate_name that other functions may/may not choose to use
     """
     proj_dir = os.path.basename(os.getcwd())
     instance_name = proj_dir + f"-{series}"  # slight mod to logic elsewhere
     exists, matches = _check_name_exists(instance_name)
 
+    if exists:
+        alternate_name = ""
+        for num in range(2, 100):
+            alternate_name = instance_name + f"-{num}"
+            exists, _ = _check_name_exists(alternate_name)
+            if not exists:
+                break
+        return instance_name, alternate_name
+    else:
+        return instance_name, ""
+
+
+"""
+WIP - will return later - copy/pasta mess
+def _get_instance_name_input(instance_name: str) -> str:
     if exists and len(matches) > 1:
         # implement logic to modify auto-name
         print("Multiple instances in this directory match that instance name")
         for index, match in matches:
             print(f"[{index}]\t{match}")
+        print("Which instance would you like")
         choice = input("Which instance would you like to act upon? [num]: ")
         while type(choice) is not int or choice < 0 or choice >= len(matches):
             choice = input("Please enter a number from the instance list. [num]: ")
@@ -387,6 +403,7 @@ def _construct_instance_name(series: str) -> str:
 
     else:
         return instance_name
+"""
 
 
 def main():
