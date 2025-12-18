@@ -112,7 +112,10 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
     result = subprocess.run(run_args)
 
     if result.returncode:
-        print(f"Error running command {command} on instance {instance_name}", file=sys.stderr)
+        print(
+            f"Error running command {command} on instance {instance_name}",
+            file=sys.stderr,
+        )
     else:
         print("Command execution completed successfully")
 
@@ -155,7 +158,8 @@ def _discover_config(series: str) -> str:
     home_dir = os.path.expanduser("~")
 
     paths_to_check = (
-        os.path.join(*parts) for parts in (
+        os.path.join(*parts)
+        for parts in (
             (CONFIG_DOTDIR, series_yaml),
             (CONFIG_DOTDIR, "base.yaml"),
             (home_dir, CONFIG_DOTDIR, series_yaml),
@@ -192,7 +196,10 @@ def _exec_config(series: str, config: str = "") -> None:
     dev_lxc_exec = config_dict["dev-lxc-exec"]
 
     if not isinstance(dev_lxc_exec, (str, list)):
-        print(f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings", file=sys.stderr)
+        print(
+            f"ERROR: dev-lxc-exec in {config} must be either a string or list of strings",
+            file=sys.stderr,
+        )
         return
 
     if isinstance(dev_lxc_exec, str):
@@ -233,7 +240,9 @@ def _create_container(
             with open(config, "rb") as config_fp:
                 config_input = config_fp.read()
         except OSError as e:
-            print(f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr)
+            print(
+                f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr
+            )
             config_input = None
     else:
         config_input = None
@@ -342,6 +351,44 @@ def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
 
 
+def _check_name_exists(instance_name: str) -> tuple[bool, list[str]]:
+    """Checks to see if lxc instance by given name already exists"""
+    matches = subprocess.run(
+        ["lxc", "ls", "--all-projects", "-c", "n", "-f", "csv", instance_name],
+        capture_output=True,
+        text=True,
+    )
+    formatted_matches = matches.stdout.strip().split()
+    if instance_name in formatted_matches:
+        return True, formatted_matches
+    else:
+        return False, []
+
+
+def _construct_instance_name(series: str) -> str:
+    """
+    Creates instance_name variable, but checks whether instance name is unique
+    If not, allows user to specify which instance to act upon
+    """
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = proj_dir + f"-{series}"  # slight mod to logic elsewhere
+    exists, matches = _check_name_exists(instance_name)
+
+    if exists and len(matches) > 1:
+        # implement logic to modify auto-name
+        print("Multiple instances in this directory match that instance name")
+        for index, match in matches:
+            print(f"[{index}]\t{match}")
+        choice = input("Which instance would you like to act upon? [num]: ")
+        while type(choice) is not int or choice < 0 or choice >= len(matches):
+            choice = input("Please enter a number from the instance list. [num]: ")
+        instance_name = matches[choice]
+        return instance_name
+
+    else:
+        return instance_name
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="dev_lxc",
@@ -446,7 +493,11 @@ def main():
     elif hasattr(parsed, "stop_after"):
         parsed.func(parsed.series, parsed.stop_after)
     elif hasattr(parsed, "config"):
-        parsed.func(parsed.series, parsed.config or _discover_config(parsed.series), parsed.profile)
+        parsed.func(
+            parsed.series,
+            parsed.config or _discover_config(parsed.series),
+            parsed.profile,
+        )
     else:
         parsed.func(parsed.series)
 
