@@ -22,8 +22,12 @@ DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
 
 
 def create(series: str, config: str = "", profile: str = ""):
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name, alternate_name = _construct_instance_name(series)
+
+    if alternate_name:
+        print(f"Multiple instances already exist with the name {instance_name}")
+        print(f"An alternate instance name of {alternate_name} will be used instead.")
+        instance_name = alternate_name
 
     if config:
         print("Using config " + config)
@@ -383,27 +387,26 @@ def _construct_instance_name(series: str) -> tuple[str, str]:
                 break
         return instance_name, alternate_name
     else:
-        return instance_name, ""
+        return instance_name, None  # <- is none type okay to return here?
 
 
-"""
-WIP - will return later - copy/pasta mess
-def _get_instance_name_input(instance_name: str) -> str:
-    if exists and len(matches) > 1:
-        # implement logic to modify auto-name
-        print("Multiple instances in this directory match that instance name")
-        for index, match in matches:
-            print(f"[{index}]\t{match}")
-        print("Which instance would you like")
-        choice = input("Which instance would you like to act upon? [num]: ")
-        while type(choice) is not int or choice < 0 or choice >= len(matches):
-            choice = input("Please enter a number from the instance list. [num]: ")
-        instance_name = matches[choice]
-        return instance_name
+def _get_instance_name_input(instance_name: str, matches: list) -> str:
+    """Allows user to choose instance upon name collision"""
+    prompt = "Enter the index of the instance you would like to act upon: "
 
-    else:
-        return instance_name
-"""
+    print("Multiple instance names match that cwd and series combination:")
+    for index, match in matches:
+        print(f"[{index}]\t{match}")
+    instance_index = input(prompt)
+    while (
+        instance_index is not int
+        or instance_index < 0
+        or instance_index >= len(matches)
+    ):
+        instance_index = input(f"Invalid entry - {prompt}")
+
+    instance_name = matches[instance_index]
+    return instance_name
 
 
 def main():
