@@ -15,19 +15,23 @@ except ImportError:
     yaml = None
 
 SERIES = ["bionic", "focal", "jammy", "noble", "questing"]
+NOUNS_DICT = {
+    "bionic": ["bear", "busybox", "badger", "builder", "bus"],
+    "focal": ["fish", "fairy", "flag", "friend", "firetruck"],
+    "jammy": ["jpeg", "juice", "jumper", "jade", "jello"],
+    "noble": ["numerator", "nonce", "night", "nickname", "narrator"],
+    "questing": ["quirk", "qbit", "quagmire", "quail", "quasar"],
+}
 DAILY_SERIES = "resolute"
 
 CONFIG_DOTDIR = ".dev-lxc"
 DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
 
 
+# revert to original `create` pending helper function decisions
 def create(series: str, config: str = "", profile: str = ""):
-    instance_name, alternate_name = _construct_instance_name(series)
-
-    if alternate_name:
-        print(f"Multiple instances already exist with the name {instance_name}")
-        print(f"An alternate instance name of {alternate_name} will be used instead.")
-        instance_name = alternate_name
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = os.path.basename(proj_dir) + f"-{series}"
 
     if config:
         print("Using config " + config)
@@ -355,47 +359,51 @@ def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
 
 
-def _check_name_exists(instance_name: str) -> tuple[bool, list[str]]:
-    """Checks to see if lxc instance by given name already exists"""
+def _check_name_exists(instance_name: str) -> list[str]:
+    """Checks whether instance_name matches any extant lxc instances and returns list of matches"""
     matches = subprocess.run(
         ["lxc", "ls", "--all-projects", "-c", "n", "-f", "csv", instance_name],
+        # `lxc ls` command note:
+        # "-c n" -> "instance data column: name"
+        # "-f csv" -> "output format type: csv"
         capture_output=True,
         text=True,
     )
     formatted_matches = matches.stdout.strip().split()
-    if instance_name in formatted_matches:
-        return True, formatted_matches
-    else:
-        return False, []
+    return formatted_matches
 
 
-def _construct_instance_name(series: str) -> tuple[str, str]:
-    """
-    Creates instance_name variable, but checks whether instance name is unique
-    If not, generates an alternate_name that other functions may/may not choose to use
-    """
+def _create_default_instance_name(series: str) -> str:
+    """Returns instance_name string, constructed from project directory and instance series"""
     proj_dir = os.path.basename(os.getcwd())
-    instance_name = proj_dir + f"-{series}"  # slight mod to logic elsewhere
-    exists, matches = _check_name_exists(instance_name)
+    instance_name = f"{proj_dir}-{series}"
+    return instance_name
 
-    if exists:
-        alternate_name = ""
-        for num in range(2, 100):
-            alternate_name = instance_name + f"-{num}"
-            exists, _ = _check_name_exists(alternate_name)
-            if not exists:
-                break
-        return instance_name, alternate_name
-    else:
-        return instance_name, None  # <- is none type okay to return here?
+
+def _create_variant_instance_name(instance_name: str) -> str:
+    """Accepts instance name and returns a variant name to avoid naming collisions"""
+    series = instance_name.split("-")[1]
+    num = random.randint(0, len(NOUNS_DICT[series]))
+    variant_name = f"{instance_name}-{NOUNS_DICT[series][num]}"
+    # I suppose it is possible there's a dup here too - so check?
+    # I can do that here, but I'm thinking better to do in calling function
+    return variant_name
+
+
+def _get_instance_name():
+    pass
+    # thinking of building this helper to save space in main cmds functions
+    # like, create(), shell(), etc. will call this, which will in turn check
+    # for existing names, maybe create a variant, look for matches, etc;
+    # still to be planned in more detail
 
 
 def _get_instance_name_input(instance_name: str, matches: list) -> str:
     """Allows user to choose instance upon name collision"""
     prompt = "Enter the index of the instance you would like to act upon: "
 
-    print("Multiple instance names match that cwd and series combination:")
-    for index, match in matches:
+    print("Multiple instance names match that cwd and series combination:\n-----")
+    for index, match in enumerate(matches):
         print(f"[{index}]\t{match}")
     instance_index = input(prompt)
     while (
