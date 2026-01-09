@@ -390,12 +390,13 @@ def _create_variant_instance_name(instance_name: str) -> str:
     return variant_name
 
 
-def _get_instance_name():
+def _fetch_instance_name():
     pass
-    # thinking of building this helper to save space in main cmds functions
+    # thinking of building this helper to save space in main cmds functions;
     # like, create(), shell(), etc. will call this, which will in turn check
     # for existing names, maybe create a variant, look for matches, etc;
-    # still to be planned in more detail
+    # still to be planned in more detail (obviously)
+    # main issue - can this handle both create() and non-create() functions?
 
 
 def _get_instance_name_input(instance_name: str, matches: list) -> str:
