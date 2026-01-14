@@ -418,7 +418,7 @@ def main():
             "series",
             type=str,
             help="The Ubuntu series used as the base for the container",
-            choices=SERIES,
+            choices=SERIES + [DAILY_SERIES],
         )
 
     create_parser.add_argument(
