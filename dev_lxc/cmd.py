@@ -15,13 +15,6 @@ except ImportError:
     yaml = None
 
 SERIES = ["bionic", "focal", "jammy", "noble", "questing"]
-NOUNS_DICT = {
-    "bionic": ["bear", "busybox", "badger", "builder", "bus"],
-    "focal": ["fish", "fairy", "flag", "friend", "firetruck"],
-    "jammy": ["jpeg", "juice", "jumper", "jade", "jello"],
-    "noble": ["numerator", "nonce", "night", "nickname", "narrator"],
-    "questing": ["quirk", "qbit", "quagmire", "quail", "quasar"],
-}
 DAILY_SERIES = "resolute"
 
 CONFIG_DOTDIR = ".dev-lxc"
@@ -359,8 +352,45 @@ def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
 
 
-def _check_name_exists(instance_name: str) -> list[str]:
-    """Checks whether instance_name matches any extant lxc instances and returns list of matches"""
+def _fetch_instance_name(series: str) -> str:
+    """
+    Accepts a series name from calling function, searches for extant instance
+    by the name "proj_dir + series", resolves case where instance name matches with
+    multiple extant instances, and returns a single instance_name
+    """
+    # no accomodation yet for user to enter exact container name instead of just series
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = f"{proj_dir}-{series}"
+    matches = _get_instance_name_matches(instance_name)
+    if not matches:
+        raise Exception(f"Error: no instance found with the name {instance_name}")
+        # I suppose we'll have to catch this everywhere _fetch_instance_name is called
+    elif len(matches) == 1 and str(matches[0]) == instance_name:
+        return instance_name
+    else:
+        try:
+            instance_name = _get_instance_name_input(instance_name, matches)
+            return instance_name
+        except Exception:
+            # I don't feel great about this
+            print("No instance selected - stopping command execution")
+            raise
+
+
+def _create_instance_name(series: str) -> str:
+    """
+    Accept series string name from calling function, and return a new instance name that does
+    not conflict with any existing instance names
+    """
+    instance_name = _create_default_instance_name(series)
+    if _get_instance_name_matches(instance_name):
+        return _create_variant_instance_name(instance_name)
+    else:
+        return instance_name
+
+
+def _get_instance_name_matches(instance_name: str) -> list[str]:
+    """Accepts an instance name and returns list of instances whose names include {instance_name}"""
     matches = subprocess.run(
         ["lxc", "ls", "--all-projects", "-c", "n", "-f", "csv", instance_name],
         # `lxc ls` command note:
@@ -382,40 +412,64 @@ def _create_default_instance_name(series: str) -> str:
 
 def _create_variant_instance_name(instance_name: str) -> str:
     """Accepts instance name and returns a variant name to avoid naming collisions"""
-    series = instance_name.split("-")[1]
-    num = random.randint(0, len(NOUNS_DICT[series]))
-    variant_name = f"{instance_name}-{NOUNS_DICT[series][num]}"
-    # I suppose it is possible there's a dup here too - so check?
-    # I can do that here, but I'm thinking better to do in calling function
+    variant_name = (
+        f"{instance_name}-{''.join(random.choices(string.ascii_lowercase, k=3))}"
+    )
+    # there is a risk of a few bad three-letter words accidentally showing up here...
+    while _get_instance_name_matches(variant_name) != []:
+        variant_name = variant_name + "".join(
+            random.choices(string.ascii_lowercase, k=1)
+        )
     return variant_name
 
 
-def _fetch_instance_name():
-    pass
-    # thinking of building this helper to save space in main cmds functions;
-    # like, create(), shell(), etc. will call this, which will in turn check
-    # for existing names, maybe create a variant, look for matches, etc;
-    # still to be planned in more detail (obviously)
-    # main issue - can this handle both create() and non-create() functions?
-
-
 def _get_instance_name_input(instance_name: str, matches: list) -> str:
-    """Allows user to choose instance upon name collision"""
+    """When multiple instances match {instance_name}, allows user to specify instance to act upon"""
     prompt = "Enter the index of the instance you would like to act upon: "
 
-    print("Multiple instance names match that cwd and series combination:\n-----")
-    for index, match in enumerate(matches):
-        print(f"[{index}]\t{match}")
-    instance_index = input(prompt)
-    while (
-        instance_index is not int
-        or instance_index < 0
-        or instance_index >= len(matches)
-    ):
-        instance_index = input(f"Invalid entry - {prompt}")
+    if len(matches) == 1:
+        print(f"One partial match for {instance_name}:\n-----")
+        print(matches[0])
+        choice = _get_confirmation("Interact with this instance? [Y/n]: ")
+        if choice:
+            instance_name = str(matches[0])
+        else:
+            raise Exception
+    else:
+        print(f"Multiple existing instances match the name '{instance_name}':\n-----")
+        for index, match in enumerate(matches):
+            print(f"[{index}]\t{match}")
 
-    instance_name = matches[instance_index]
+        while True:
+            choice = input(prompt)
+            try:
+                instance_index = int(choice)
+                if 0 < instance_index < len(matches):
+                    break
+                else:
+                    print(f"Error: Index must be between 0 and {len(matches) - 1}")
+            except ValueError:
+                print(f"Error: {choice} is not an integer")
+        instance_name = matches[instance_index]
+
     return instance_name
+
+
+def _get_confirmation(prompt: str) -> bool:
+    """
+    Accept a prompt from a function needing user confirmation and return a bool
+    representing the user's choice to proceed (True) or not (False); default is True
+    """
+    while True:
+        choice = input(prompt).strip().lower()
+        if choice == "":
+            return True
+        if choice in ("y", "yes"):
+            return True
+        elif choice in ("n", "no"):
+            return False
+        else:
+            print("Invalid entry - please enter 'y' or 'n'")
 
 
 def main():
