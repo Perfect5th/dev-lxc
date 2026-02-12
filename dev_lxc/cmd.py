@@ -233,9 +233,20 @@ def _create_container(
         sys.exit(4)
 
     if config:
+
+        if profile:
+            print(
+                "WARNING: configs always take precendence over profiles. "
+                "You've specified both, and we will attempt to merge them into "
+                "a single config."
+            )
+
         try:
             with open(config, "rb") as config_fp:
                 config_input = config_fp.read()
+
+            if profile:
+                config_input = _merge_config_and_profile(config_input, profile)
         except OSError as e:
             print(f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr)
             config_input = None
@@ -252,7 +263,7 @@ def _create_container(
         f"raw.idmap=both {uid} 1000",
     ]
 
-    if profile:
+    if profile and not config_input:
         cmd.extend(["--profile", profile])
 
     subprocess.run(cmd, input=config_input, check=True)
@@ -344,6 +355,49 @@ def _start_if_stopped(instance_name: str) -> None:
 
 def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
+
+
+def _merge_config_and_profile(config_input: bytes, profile: str) -> bytes:
+    if not profile:
+        return config_input
+
+    if yaml is None:
+        print(
+            "PyYAML is not installed, cannot merge profile and config. "
+            "Only config will be used."
+        )
+        return config_input
+
+    profile_call = subprocess.run(
+        ["lxc", "profile", "show", profile],
+        capture_output=True,
+        check=True,
+    )
+
+    profile_dict = yaml.safe_load(profile_call.stdout)
+    config_dict = yaml.safe_load(config_input)
+
+    _deep_merge(config_dict, profile_dict)
+
+    return yaml.safe_dump(profile_dict).encode()
+
+
+def _deep_merge(d1: dict, d2: dict):
+    """
+    Deep-merges `d1` into `d2`.
+
+    Yes I wrote this. I don't know why I didn't just copy it from somewhere.
+    """
+    for k1 in d1.keys():
+        if k1 in d2:
+            v1 = d1[k1]
+            v2 = d2[k1]
+            if isinstance(v1, dict) and isinstance(v2, dict):
+                _deep_merge(v1, v2)
+            else:
+                d2[k1] = d1[k1]
+        else:
+            d2[k1] = d1[k1]
 
 
 def main():
