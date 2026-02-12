@@ -260,7 +260,7 @@ def _create_container(
     # Wait for cloud-init to finish.
     print(
         f"Waiting for {instance_name} to complete initialization and package installation"
-        " (this might take awhile)"
+        " (this might take a while)"
     )
     subprocess.run(
         ["lxc", "exec", instance_name, "--", "cloud-init", "status", "--wait"],
