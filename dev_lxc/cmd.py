@@ -412,12 +412,9 @@ def _create_default_instance_name(series: str) -> str:
 
 def _create_variant_instance_name(instance_name: str) -> str:
     """Accepts instance name and returns a variant name to avoid naming collisions"""
-    variant_name = (
-        f"{instance_name}-{''.join(random.choices(string.ascii_lowercase, k=3))}"
-    )
-    # there is a risk of bad words accidentally showing up here... ignoring for now
+    variant_name = f"{instance_name}-{''.join(random.choices(string.hexdigits, k=3))}"
     while _get_instance_name_matches(variant_name) != []:
-        variant_name += "".join(random.choices(string.ascii_lowercase, k=1))
+        variant_name += "".join(random.choices(string.hexdigits, k=1))
     return variant_name
 
 
@@ -426,8 +423,7 @@ def _get_instance_name_input(instance_name: str, matches: list) -> str:
     prompt = "Enter the index of the instance you would like to act upon: "
 
     if len(matches) == 1:
-        print(f"One partial match for {instance_name}:\n-----")
-        print(matches[0])
+        print(f"One partial match for {instance_name}:\n-----\nmatches[0]")
         choice = _get_confirmation("Interact with this instance? [Y/n]: ")
         if choice:
             instance_name = str(matches[0])
