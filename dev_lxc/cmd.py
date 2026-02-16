@@ -415,7 +415,7 @@ def _create_variant_instance_name(instance_name: str) -> str:
     variant_name = (
         f"{instance_name}-{''.join(random.choices(string.ascii_lowercase, k=3))}"
     )
-    # there is a risk of a few bad three-letter words accidentally showing up here...
+    # there is a risk of bad words accidentally showing up here... ignoring for now
     while _get_instance_name_matches(variant_name) != []:
         variant_name += "".join(random.choices(string.ascii_lowercase, k=1))
     return variant_name
