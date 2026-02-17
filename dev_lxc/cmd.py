@@ -23,8 +23,7 @@ DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
 
 # revert to original `create` pending helper function decisions
 def create(series: str, config: str = "", profile: str = ""):
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _create_instance_name(series)
 
     if config:
         print("Using config " + config)
@@ -44,7 +43,7 @@ Jump into your new instance with:
 def shell(series: str, stop_after: bool):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
 
     _start_if_stopped(instance_name)
 
@@ -65,12 +64,11 @@ def shell(series: str, stop_after: bool):
 
     if stop_after:
         print(f"Stopping {instance_name}")
-        stop(series)
+        stop(instance_name)
 
 
 def remove(series: str):
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
 
     _remove(instance_name)
 
@@ -81,10 +79,10 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
     if emphemeral:
         ident = "".join(random.sample(string.ascii_lowercase, 12))
-        instance_name = os.path.basename(proj_dir) + f"-{series}-{ident}"
+        instance_name = f"-{_fetch_instance_name(series)}-{ident}"
         _create_container(instance_name, series)
     else:
-        instance_name = os.path.basename(proj_dir) + f"-{series}"
+        instance_name = _fetch_instance_name(series)
 
     _start_if_stopped(instance_name)
 
@@ -130,15 +128,13 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
 
 def start(series: str) -> None:
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
 
     _start_if_stopped(instance_name)
 
 
 def stop(series: str) -> None:
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
 
     _stop(instance_name)
 
