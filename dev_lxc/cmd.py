@@ -359,22 +359,16 @@ def _fetch_instance_name(series: str) -> str:
     multiple extant instances, and returns a single instance_name
     """
     # no accomodation yet for user to enter exact container name instead of just series
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = f"{proj_dir}-{series}"
+    instance_name = _create_default_instance_name(series)
     matches = _get_instance_name_matches(instance_name)
     if not matches:
-        raise Exception(f"Error: no instance found with the name {instance_name}")
-        # I suppose we'll have to catch this everywhere _fetch_instance_name is called
+        return ""
+        # calling function needs to handle empty string result (no matches)
     elif len(matches) == 1 and str(matches[0]) == instance_name:
         return instance_name
     else:
-        try:
-            instance_name = _get_instance_name_input(instance_name, matches)
-            return instance_name
-        except Exception:
-            # I don't feel great about this
-            print("No instance selected - stopping command execution")
-            raise
+        instance_name = _get_instance_name_input(instance_name, matches)
+        return instance_name
 
 
 def _create_instance_name(series: str) -> str:
@@ -420,22 +414,23 @@ def _create_variant_instance_name(instance_name: str) -> str:
 
 def _get_instance_name_input(instance_name: str, matches: list) -> str:
     """When multiple instances match {instance_name}, allows user to specify instance to act upon"""
-    prompt = "Enter the index of the instance you would like to act upon: "
-
     if len(matches) == 1:
-        print(f"One partial match for {instance_name}:\n-----\nmatches[0]")
-        choice = _get_confirmation("Interact with this instance? [Y/n]: ")
+        print(f"One partial match for {instance_name}:\n-----\n")
+        choice = _get_confirmation(f"Interact with instance {matches[0]}? [Y/n]: ")
         if choice:
             instance_name = str(matches[0])
         else:
-            raise Exception
+            return ""
+            # calling function needs to handle empty string return
     else:
         print(f"Multiple existing instances match the name '{instance_name}':\n-----")
         for index, match in enumerate(matches):
             print(f"[{index}]\t{match}")
 
         while True:
-            choice = input(prompt)
+            choice = input(
+                "Enter the index of the instance you would like to act upon: "
+            )
             try:
                 instance_index = int(choice)
                 if 0 < instance_index < len(matches):
