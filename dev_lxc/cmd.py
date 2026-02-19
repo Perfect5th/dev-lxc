@@ -352,14 +352,13 @@ def _fetch_instance_name(series: str) -> str:
     """
     Accepts a series name from calling function, searches for extant instance
     by the name "proj_dir + series", resolves case where instance name matches with
-    multiple extant instances, and returns a single instance_name
+    multiple extant instances, and returns a single instance_name; may return
+    "" if no match found or user declines input in _get_instance_name_input
     """
-    # no accomodation yet for user to enter exact container name instead of just series
     instance_name = _create_default_instance_name(series)
     matches = _get_instance_name_matches(instance_name)
     if not matches:
         return ""
-        # calling function needs to handle empty string result (no matches)
     elif len(matches) == 1 and str(matches[0]) == instance_name:
         return instance_name
     else:
@@ -402,9 +401,11 @@ def _create_default_instance_name(series: str) -> str:
 
 def _create_variant_instance_name(instance_name: str) -> str:
     """Accepts instance name and returns a variant name to avoid naming collisions"""
-    variant_name = f"{instance_name}-{''.join(random.choices(string.hexdigits, k=3))}"
+    variant_name = (
+        f"{instance_name}-{''.join(random.choices(string.hexdigits, k=3)).lower()}"
+    )
     while _get_instance_name_matches(variant_name) != []:
-        variant_name += "".join(random.choices(string.hexdigits, k=1))
+        variant_name += "".join(random.choices(string.hexdigits, k=1)).lower()
     return variant_name
 
 
@@ -417,7 +418,6 @@ def _get_instance_name_input(instance_name: str, matches: list) -> str:
             instance_name = str(matches[0])
         else:
             return ""
-            # calling function needs to handle empty string return
     else:
         print(f"Multiple existing instances match the name '{instance_name}':\n-----")
         for index, match in enumerate(matches):
