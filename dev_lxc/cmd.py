@@ -55,9 +55,10 @@ def shell(series: str, stop_after: bool):
             lxc_repo_path,
             instance_name,
             "--",
-            "su",
-            "-",
+            "sudo",
+            "-u",
             "ubuntu",
+            "bash",
         ],
     )
 
