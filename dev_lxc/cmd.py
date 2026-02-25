@@ -51,18 +51,13 @@ def shell(series: str, stop_after: bool):
         [
             "lxc",
             "exec",
-            "--user",
-            "1000",
-            "--group",
-            "1000",
             "--cwd",
             lxc_repo_path,
-            "--env",
-            "HOME=/home/ubuntu",
-            "--env",
-            "USER=ubuntu",
             instance_name,
-            "bash",
+            "--",
+            "su",
+            "-",
+            "ubuntu",
         ],
     )
 
