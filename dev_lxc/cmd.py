@@ -21,7 +21,6 @@ CONFIG_DOTDIR = ".dev-lxc"
 DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
 
 
-# revert to original `create` pending helper function decisions
 def create(series: str, config: str = "", profile: str = ""):
     instance_name = _create_instance_name(series)
 
