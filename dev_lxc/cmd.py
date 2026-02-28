@@ -43,6 +43,8 @@ def shell(series: str, stop_after: bool):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
     instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _start_if_stopped(instance_name)
 
@@ -68,6 +70,8 @@ def shell(series: str, stop_after: bool):
 
 def remove(series: str):
     instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _remove(instance_name)
 
@@ -78,10 +82,12 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
     if emphemeral:
         ident = "".join(random.sample(string.ascii_lowercase, 12))
-        instance_name = f"-{_fetch_instance_name(series)}-{ident}"
+        instance_name = f"-{_create_instance_name(series)}-{ident}"
         _create_container(instance_name, series)
     else:
         instance_name = _fetch_instance_name(series)
+        if not instance_name:
+            return
 
     _start_if_stopped(instance_name)
 
@@ -128,12 +134,16 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
 def start(series: str) -> None:
     instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _start_if_stopped(instance_name)
 
 
 def stop(series: str) -> None:
     instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _stop(instance_name)
 
@@ -357,6 +367,7 @@ def _fetch_instance_name(series: str) -> str:
     instance_name = _create_default_instance_name(series)
     matches = _get_instance_name_matches(instance_name)
     if not matches:
+        print(f"No matches for {instance_name} - exiting")
         return ""
     elif len(matches) == 1 and str(matches[0]) == instance_name:
         return instance_name
@@ -416,6 +427,7 @@ def _get_instance_name_input(instance_name: str, matches: list) -> str:
         if choice:
             instance_name = str(matches[0])
         else:
+            print(f"User declined to interaction with {matches[0]} - exiting")
             return ""
     else:
         print(f"Multiple existing instances match the name '{instance_name}':\n-----")
@@ -424,14 +436,18 @@ def _get_instance_name_input(instance_name: str, matches: list) -> str:
 
         while True:
             choice = input(
-                "Enter the index of the instance you would like to act upon: "
+                "Enter the index of the instance you would like to act upon, or -1 for none: "
             )
+
             try:
                 instance_index = int(choice)
-                if 0 <= instance_index < len(matches):
+                if instance_index == -1:
+                    print("User declined instance interaction - exiting")
+                    return ""
+                elif 0 <= instance_index < len(matches):
                     break
                 else:
-                    print(f"Error: Index must be between 0 and {len(matches) - 1}")
+                    print(f"Error: Choice must be between -1 and {len(matches) - 1}")
             except ValueError:
                 print(f"Error: {choice} is not an integer")
         instance_name = matches[instance_index]
