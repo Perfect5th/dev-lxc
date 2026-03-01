@@ -422,8 +422,8 @@ def _create_variant_instance_name(instance_name: str) -> str:
 def _get_instance_name_input(instance_name: str, matches: list) -> str:
     """When multiple instances match {instance_name}, allows user to specify instance to act upon"""
     if len(matches) == 1:
-        print(f"One partial match for {instance_name};\n")
-        choice = _get_confirmation(f"Interact with instance {matches[0]}? [Y/n]: ")
+        print(f"One partial match for {instance_name}: '{matches[0]}'")
+        choice = _get_confirmation(f"Interact with instance '{matches[0]}'? [Y/n]: ")
         if choice:
             instance_name = str(matches[0])
         else:
