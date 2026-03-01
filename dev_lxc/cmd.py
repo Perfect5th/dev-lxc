@@ -22,8 +22,7 @@ DEFAULT_CONFIG = os.path.expanduser("~/" + CONFIG_DOTDIR)
 
 
 def create(series: str, config: str = "", profile: str = ""):
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _create_instance_name(series)
 
     if config:
         print("Using config " + config)
@@ -43,7 +42,9 @@ Jump into your new instance with:
 def shell(series: str, stop_after: bool):
     proj_dir = os.path.basename(os.getcwd())
     lxc_repo_path = f"/home/ubuntu/{os.path.basename(proj_dir)}"
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _start_if_stopped(instance_name)
 
@@ -64,12 +65,13 @@ def shell(series: str, stop_after: bool):
 
     if stop_after:
         print(f"Stopping {instance_name}")
-        stop(series)
+        stop(instance_name)
 
 
 def remove(series: str):
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _remove(instance_name)
 
@@ -80,10 +82,12 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
     if emphemeral:
         ident = "".join(random.sample(string.ascii_lowercase, 12))
-        instance_name = os.path.basename(proj_dir) + f"-{series}-{ident}"
+        instance_name = f"{_create_instance_name(series)}-{ident}"
         _create_container(instance_name, series)
     else:
-        instance_name = os.path.basename(proj_dir) + f"-{series}"
+        instance_name = _fetch_instance_name(series)
+        if not instance_name:
+            return
 
     _start_if_stopped(instance_name)
 
@@ -126,15 +130,17 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
 
 def start(series: str) -> None:
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _start_if_stopped(instance_name)
 
 
 def stop(series: str) -> None:
-    proj_dir = os.path.basename(os.getcwd())
-    instance_name = os.path.basename(proj_dir) + f"-{series}"
+    instance_name = _fetch_instance_name(series)
+    if not instance_name:
+        return
 
     _stop(instance_name)
 
@@ -340,6 +346,121 @@ def _start_if_stopped(instance_name: str) -> None:
 
 def _stop(instance_name: str) -> None:
     subprocess.run(["lxc", "stop", instance_name])
+
+
+def _fetch_instance_name(series: str) -> str:
+    """
+    Accepts a series name from calling function, searches for extant instance
+    by the name "proj_dir + series", resolves case where instance name matches with
+    multiple extant instances, and returns a single instance_name; may return
+    "" if no match found or user declines input in _get_instance_name_input
+    """
+    instance_name = _create_default_instance_name(series)
+    matches = _get_instance_name_matches(instance_name)
+    if not matches:
+        print(f"No matches for {instance_name} - exiting")
+        return ""
+    elif len(matches) == 1 and str(matches[0]) == instance_name:
+        return instance_name
+    else:
+        instance_name = _get_instance_name_input(instance_name, matches)
+        return instance_name
+
+
+def _create_instance_name(series: str) -> str:
+    """
+    Accept series string name from calling function, and return a new instance name that does
+    not conflict with any existing instance names
+    """
+    instance_name = _create_default_instance_name(series)
+    if _get_instance_name_matches(instance_name):
+        return _create_variant_instance_name(instance_name)
+    else:
+        return instance_name
+
+
+def _get_instance_name_matches(instance_name: str) -> list[str]:
+    """Accepts an instance name and returns list of instances whose names include {instance_name}"""
+    matches = subprocess.run(
+        ["lxc", "ls", "--all-projects", "-c", "n", "-f", "csv", instance_name],
+        # `lxc ls` command note:
+        # "-c n" -> "instance data column: name"
+        # "-f csv" -> "output format type: csv"
+        capture_output=True,
+        text=True,
+    )
+    formatted_matches = matches.stdout.strip().split()
+    return formatted_matches
+
+
+def _create_default_instance_name(series: str) -> str:
+    """Returns instance_name string, constructed from project directory and instance series"""
+    proj_dir = os.path.basename(os.getcwd())
+    instance_name = f"{proj_dir}-{series}"
+    return instance_name
+
+
+def _create_variant_instance_name(instance_name: str) -> str:
+    """Accepts instance name and returns a variant name to avoid naming collisions"""
+    variant_name = (
+        f"{instance_name}-{''.join(random.choices(string.hexdigits, k=3)).lower()}"
+    )
+    while _get_instance_name_matches(variant_name) != []:
+        variant_name += "".join(random.choices(string.hexdigits, k=1)).lower()
+    return variant_name
+
+
+def _get_instance_name_input(instance_name: str, matches: list) -> str:
+    """When multiple instances match {instance_name}, allows user to specify instance to act upon"""
+    if len(matches) == 1:
+        print(f"One partial match for {instance_name}: '{matches[0]}'")
+        choice = _get_confirmation(f"Interact with instance '{matches[0]}'? [Y/n]: ")
+        if choice:
+            instance_name = str(matches[0])
+        else:
+            print(f"User declined to interaction with {matches[0]} - exiting")
+            return ""
+    else:
+        print(f"Multiple existing instances match the name '{instance_name}':\n-----")
+        for index, match in enumerate(matches):
+            print(f"[{index}]\t{match}")
+
+        while True:
+            choice = input(
+                "Enter the index of the instance you would like to act upon, or -1 for none: "
+            )
+
+            try:
+                instance_index = int(choice)
+                if instance_index == -1:
+                    print("User declined instance interaction - exiting")
+                    return ""
+                elif 0 <= instance_index < len(matches):
+                    break
+                else:
+                    print(f"Error: Choice must be between -1 and {len(matches) - 1}")
+            except ValueError:
+                print(f"Error: {choice} is not an integer")
+        instance_name = matches[instance_index]
+
+    return instance_name
+
+
+def _get_confirmation(prompt: str) -> bool:
+    """
+    Accept a prompt from a function needing user confirmation and return a bool
+    representing the user's choice to proceed (True) or not (False); default is True
+    """
+    while True:
+        choice = input(prompt).strip().lower()
+        if choice == "":
+            return True
+        if choice in ("y", "yes"):
+            return True
+        elif choice in ("n", "no"):
+            return False
+        else:
+            print("Invalid entry - please enter 'y' or 'n'")
 
 
 def main():
