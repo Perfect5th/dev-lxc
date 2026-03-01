@@ -239,9 +239,7 @@ def _create_container(
             with open(config, "rb") as config_fp:
                 config_input = config_fp.read()
         except OSError as e:
-            print(
-                f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr
-            )
+            print(f"ERROR: Could not read LXD config from {config}: {e}", file=sys.stderr)
             config_input = None
     else:
         config_input = None
