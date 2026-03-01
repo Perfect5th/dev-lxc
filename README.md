@@ -14,11 +14,15 @@ Create an instance using a specific Ubuntu series, by codename:
 
     dev_lxc create jammy
 
-The instance name is generated from the current directory, so you can only have one instance of each series per directory. Names _will_ clash.
+Instance names are generated from the current directory + the series of the container; for example: `myProject-noble`. If you create another container of the same series in the same directory (or one with the same directory name elsewhere in your filesystem), a hex-character suffix will be added to the instance name to ensure uniqueness; for example: `myProject-noble-e8d`.
 
 If you have a valid YAML file for configuring the instance (nice for if you want it to start with certain packages installed):
 
     dev_lxc create jammy --config ./my-config.yaml
+
+### Interacting with existing instances
+
+Use the commands below to interact with your existing instances. If there is only a partial match or if there are multiple matches for your current directory + series, you will be prompted to specify which instance to act upon. At this time, running these commands while specifying an instance name instead of its series is not supported.
 
 ### Open a shell in an instance
 
