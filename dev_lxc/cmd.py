@@ -82,7 +82,7 @@ def exec_cmd(series: str, command: str, stop_after: bool, emphemeral: bool, *env
 
     if emphemeral:
         ident = "".join(random.sample(string.ascii_lowercase, 12))
-        instance_name = f"-{_create_instance_name(series)}-{ident}"
+        instance_name = f"{_create_instance_name(series)}-{ident}"
         _create_container(instance_name, series)
     else:
         instance_name = _fetch_instance_name(series)
